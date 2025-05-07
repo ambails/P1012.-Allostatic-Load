@@ -1,0 +1,705 @@
+---
+title: "AL methods paper_Individual AL Analysis"
+output: html_document
+date: "2024-10-15
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r cars}
+#Output = ('/Users/alexis/Library/CloudStorage/OneDrive-UniversityofNorthCarolinaatChapelHill/CEMALB_DataAnalysisPM/Projects/P1012. Allostatic Load/P1012.3. Analyses/P1012.3.2. Allostatic Load Calculation/Output')
+cur_date = "100424"
+```
+
+
+```{r cars}
+#install.packages("openxlsx")
+#install.packages("gtsummary")
+#install.packages("ordinalNet")
+#install.packages(reshape2)
+#install.packages("rstatix")
+#install.packages("car")
+#install.packages("ggrepel")
+#install.packages("ggsci")
+#install.packages("cowplot")
+#install.packages("ggpubr")
+#install.packages("rlang")
+#install.packages("wesanderson")
+```
+
+
+```{r cars}
+library(readxl)
+library(openxlsx)
+library(tidyverse)
+library(gtsummary)
+library(ordinalNet)
+library(reshape2)
+library(rstatix)
+library(car)
+library(ggrepel)
+library(ggsci)
+library(cowplot)
+library(ggpubr)
+library(rlang)
+library(wesanderson)
+```
+
+
+```{r cars}
+# reading in file
+bp_df = data.frame(read_excel("~/Documents/1. Allostatic load method development/R files/Allostatic_Mediator_Data_050824.xlsx", sheet = 4)) 
+subject_info_df = data.frame(read_excel("~/Documents/1. Allostatic load method development/R files/Subject_Info_050824.xlsx", sheet = 2))
+mediator_scores_df = data.frame(read_excel("~/Documents/1. Allostatic load method development/R files/Mediator_Scores_061424.xlsx"))
+biomarker_df = data.frame(read_excel("~/Documents/1. Allostatic load method development/R files/Allostatic_Mediator_Data_050824.xlsx", sheet = 2)) 
+```
+
+```{r}
+
+head(bp_df)
+head(subject_info_df)
+head(mediator_scores_df)
+head(biomarker_df)
+
+AL_biomarkers <- biomarker_df[biomarker_df$Category == "AL Biomarker",]
+Cytokines_df <- biomarker_df[biomarker_df$Category == "Cytokine",]
+
+
+AL_biomarkers_pivot = pivot_wider(AL_biomarkers ,names_from = Variable, values_from = Value)
+Cytokines_df_pivot = pivot_wider(Cytokines_df ,names_from = Variable, values_from = Value)
+
+head(AL_biomarkers_pivot)
+head(Cytokines_df_pivot)
+```
+
+```{r}
+# seeing if this data is normal
+normality_AL  <-do.call(rbind.data.frame, apply(AL_biomarkers_pivot[,3:9], 2, shapiro.test))[,1:3] %>%
+    mutate(Normality = ifelse(p.value < 0.05, "Non-normal", "Normal"))
+
+normality_cytokine  <-do.call(rbind.data.frame, apply(Cytokines_df_pivot[,3:13], 2, shapiro.test))[,1:3] %>%
+    mutate(Normality = ifelse(p.value < 0.05, "Non-normal", "Normal"))
+
+
+head(normality_AL)
+head(normality_cytokine)
+
+## the 2 indicates the test should be applied by column 
+#all data is non-normal using Shapiro-Wilk Test
+```
+
+```{r}
+# adding in demographic info for each subject
+AL_df <- inner_join(AL_biomarkers_pivot, subject_info_df[,c(3,5,6,7,8)])
+Cytokines <- inner_join(Cytokines_df_pivot, subject_info_df[,c(3,5,6,7,8)])
+
+
+# converting into factors
+AL_df$Smoking_Status = factor(AL_df$Smoking_Status, levels = c("NS", "CS"))
+AL_df$Sex = factor(AL_df$Sex, levels = c("F", "M"))
+AL_df$Race = factor(AL_df$Race, levels = c("W", "B"))
+
+Cytokines$Smoking_Status = factor(Cytokines$Smoking_Status, levels = c("NS", "CS"))
+Cytokines$Sex = factor(Cytokines$Sex, levels = c("F", "M"))
+Cytokines$Race = factor(Cytokines$Race, levels = c("W", "B"))
+
+head(AL_df)
+head(Cytokines)
+
+```
+
+```{r}
+
+##-------Moving forward with AL biomarker analysis only ------
+#lavene test
+
+#Sex - lavene test significance between Sex and CRP (p=0.008)
+leveneTest(Cortisol ~ Sex, data = AL_df)[1,3]
+leveneTest(Noradrenaline ~ Sex, data = AL_df)[1,3]
+leveneTest(Hba1c ~ Sex, data = AL_df)[1,3]
+leveneTest(Fibrinogen ~ Sex, data = AL_df)[1,3]
+leveneTest(CRP ~ Sex, data = AL_df)[1,3] ##significant, assume variance between groups are diff
+leveneTest(HDL ~ Sex, data = AL_df)[1,3]
+leveneTest(Epinephrine ~ Sex, data = AL_df)[1,3]
+
+#Race - lavene test significance between Race and Cortisol (p=0.048)
+leveneTest(Cortisol ~ Race, data = AL_df)[1,3] ##significant, assume variance is different between groups 
+leveneTest(Noradrenaline ~ Race, data = AL_df)[1,3]
+leveneTest(Hba1c ~ Race, data = AL_df)[1,3]
+leveneTest(Fibrinogen ~ Race, data = AL_df)[1,3]
+leveneTest(CRP ~ Race, data = AL_df)[1,3] 
+leveneTest(HDL ~ Race, data = AL_df)[1,3]
+leveneTest(Epinephrine ~ Race, data = AL_df)[1,3]
+
+#Smoking status - lavene test showed no significance
+leveneTest(Cortisol ~ Smoking_Status, data = AL_df)[1,3] 
+leveneTest(Noradrenaline ~ Smoking_Status, data = AL_df)[1,3]
+leveneTest(Hba1c ~ Smoking_Status, data = AL_df)[1,3]
+leveneTest(Fibrinogen ~ Smoking_Status, data = AL_df)[1,3]
+leveneTest(CRP ~ Smoking_Status, data = AL_df)[1,3] 
+leveneTest(HDL ~ Smoking_Status, data = AL_df)[1,3]
+leveneTest(Epinephrine ~ Smoking_Status, data = AL_df)[1,3]
+
+
+
+```
+
+```{r}
+# Assesing differences in counts for each variable using chi squared tests
+# smoking status
+table(AL_df[,c(10)])
+chisq.test(table(AL_df[,c(10)]))
+# sex
+table(AL_df[,c(11)])
+chisq.test(table(AL_df[,c(11)])) ##significant diff between males and females sample size
+# race
+table(AL_df[,c(13)])
+chisq.test(table(AL_df[,c(13)]))
+
+
+# smoking status and sex
+table(AL_df[,c(10:11)])
+chisq.test(table(AL_df[,c(10:11)]))
+# smoking status and race
+table(AL_df[,c(10,13)])
+chisq.test(table(AL_df[,c(10,13)]))
+# race and sex
+table(AL_df[,c(11,13)])
+chisq.test(table(AL_df[,c(11,13)]))
+
+## There is only a significant difference between number of males and females included in the study 
+```
+
+```{r}
+#STATS
+
+# adding additional variables that are stratified
+AL_df = AL_df %>%
+    unite(`Race:Smoking_Status`, Race, Smoking_Status, sep = ":", remove = FALSE) %>%
+    unite(`Race:Sex`, Race, Sex, sep = ":", remove = FALSE) %>%
+    unite(`Sex:Smoking_Status`, Sex, Smoking_Status, sep = ":", remove = FALSE)
+
+
+head(AL_df)
+```
+
+```{r}
+##running t test to assess differences between groups for each individual biomarker 
+t_test_output = function(df, variable, outcome){
+    t_test = t.test(formula(paste(outcome, "~", variable)), df)
+    t_test_values = data.frame(Variable = variable, Difference = t_test$estimate[[2]] - t_test$estimate[[1]], 
+                               P_Value = t_test$p.value)
+
+    values_df = data.frame(Outcome = outcome, t_test_values)
+                              
+    return(values_df)
+}
+
+##calling the function
+smoking_AL_cort = t_test_output(AL_df, 'Smoking_Status', 'Cortisol')
+sex_AL_cort = t_test_output(AL_df, 'Sex', 'Cortisol')
+race_AL_cort = t_test_output(AL_df, 'Race', 'Cortisol')
+
+smoking_AL_nor = t_test_output(AL_df, 'Smoking_Status', 'Noradrenaline')
+sex_AL_nor = t_test_output(AL_df, 'Sex', 'Noradrenaline') ##significant (p=0.003)
+race_AL_nor = t_test_output(AL_df, 'Race', 'Noradrenaline')
+
+smoking_AL_epi = t_test_output(AL_df, 'Smoking_Status', 'Epinephrine') ##close sig
+sex_AL_epi = t_test_output(AL_df, 'Sex', 'Epinephrine') 
+race_AL_epi = t_test_output(AL_df, 'Race', 'Epinephrine')
+
+smoking_AL_fib = t_test_output(AL_df, 'Smoking_Status', 'Fibrinogen')
+sex_AL_fib= t_test_output(AL_df, 'Sex', 'Fibrinogen')
+race_AL_fib = t_test_output(AL_df, 'Race', 'Fibrinogen') ##significant (p=0.016)
+
+smoking_AL_hba = t_test_output(AL_df, 'Smoking_Status', 'Hba1c')
+sex_AL_hba = t_test_output(AL_df, 'Sex', 'Hba1c')
+race_AL_hba = t_test_output(AL_df, 'Race', 'Hba1c') 
+
+smoking_AL_crp = t_test_output(AL_df, 'Smoking_Status', 'CRP')
+sex_AL_crp = t_test_output(AL_df, 'Sex', 'CRP') ##significant (p=0.001)
+race_AL_crp = t_test_output(AL_df, 'Race', 'CRP') 
+
+smoking_AL_hdl = t_test_output(AL_df, 'Smoking_Status', 'HDL')
+sex_AL_hdl = t_test_output(AL_df, 'Sex', 'HDL') 
+race_AL_hdl = t_test_output(AL_df, 'Race', 'HDL') 
+
+AL_t_test_df = unique(rbind(smoking_AL_cort, sex_AL_cort, race_AL_cort,smoking_AL_nor, sex_AL_nor, race_AL_nor, smoking_AL_epi,sex_AL_epi ,race_AL_epi,  smoking_AL_fib ,sex_AL_fib,race_AL_fib, smoking_AL_hba, sex_AL_hba, race_AL_hba, smoking_AL_crp, sex_AL_crp, race_AL_crp, smoking_AL_hdl,   sex_AL_hdl, race_AL_hdl  ))
+
+head(AL_t_test_df)
+
+AL_t_test_df %>%
+    filter(P_Value < 0.05) 
+
+```
+
+
+```{r}
+# creating a df with cleaned stratified names for plotting
+cleaned_AL_df = AL_df %>%
+    mutate(Race_Sex = ifelse(`Race:Sex` == "W:M", 'White Males', 
+                             ifelse(`Race:Sex` == "W:F", 'White Females', 
+                                   ifelse(`Race:Sex` == "B:M", 'Black Males', 
+                                         ifelse(`Race:Sex` == "B:F", 'Black Females', 
+                                                NA))))) %>%
+   mutate(Sex_Smoking_Status = ifelse(`Sex:Smoking_Status` == "M:NS", 'Male NS', 
+                             ifelse(`Sex:Smoking_Status` == "F:NS", 'Female NS', 
+                                   ifelse(`Sex:Smoking_Status` == "M:CS", 'Male CS', 
+                                         ifelse(`Sex:Smoking_Status` == "F:CS", 'Female CS', 
+                                                NA))))) %>%
+   mutate(Smoking_Status_Race = ifelse(`Race:Smoking_Status` == "NS:W", 'White NS', 
+                             ifelse(`Race:Smoking_Status` == "NS:B", 'Black NS', 
+                                   ifelse(`Race:Smoking_Status` == "CS:W", 'White CS', 
+                                         ifelse(`Race:Smoking_Status` == "CS:B", 'Black CS', 
+                                                NA)))))
+
+head(cleaned_AL_df)
+```
+
+```{r}
+#performing t-test for sex difference
+##p adj using FDR
+#P value <0.1 is significant 
+
+
+t_test_p_values_AL_df_cort_sex = compare_means(Cortisol ~ Sex, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+
+t_test_p_values_AL_df_nor_sex = compare_means(Noradrenaline ~ Sex, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+t_test_p_values_AL_df_epi_sex = compare_means(Epinephrine ~ Sex, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+t_test_p_values_AL_df_hba_sex = compare_means(Hba1c ~ Sex, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+t_test_p_values_AL_df_hdl_sex = compare_means(HDL ~ Sex, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+t_test_p_values_AL_df_fib_sex = compare_means(Fibrinogen ~ Sex, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+t_test_p_values_AL_df_CRP_sex = compare_means(CRP ~ Sex, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+##data table showing p value diff between males and females for Cortisol
+AL_t_test_p_values_sex= unique(rbind(t_test_p_values_AL_df_cort_sex ,t_test_p_values_AL_df_nor_sex ,t_test_p_values_AL_df_epi_sex,t_test_p_values_AL_df_hba_sex ,t_test_p_values_AL_df_hdl_sex,t_test_p_values_AL_df_fib_sex,t_test_p_values_AL_df_CRP_sex))
+```
+
+```{r}
+
+#performing t-test for race difference
+
+t_test_p_values_AL_df_cort_race = compare_means(Cortisol ~ Race, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns'))))))
+
+t_test_p_values_AL_df_nor_race = compare_means(Noradrenaline ~ Race, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+t_test_p_values_AL_df_epi_race = compare_means(Epinephrine ~ Race, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+t_test_p_values_AL_df_hba_race = compare_means(Hba1c ~ Race, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+t_test_p_values_AL_df_hdl_race = compare_means(HDL ~ Race, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+t_test_p_values_AL_df_fib_race = compare_means(Fibrinogen ~ Race, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+t_test_p_values_AL_df_CRP_race = compare_means(CRP ~ Race, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+AL_t_test_p_values_race= unique(rbind(t_test_p_values_AL_df_cort_race ,t_test_p_values_AL_df_nor_race ,t_test_p_values_AL_df_epi_race,t_test_p_values_AL_df_hba_race ,t_test_p_values_AL_df_hdl_race,t_test_p_values_AL_df_fib_race,t_test_p_values_AL_df_CRP_race))
+```
+
+
+
+```{r}
+#performing t-test for smoking status difference
+
+
+t_test_p_values_AL_df_cort_smoke= compare_means(Cortisol ~ Smoking_Status, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns'))))))
+
+t_test_p_values_AL_df_nor_smoke = compare_means(Noradrenaline ~ Smoking_Status, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+t_test_p_values_AL_df_epi_smoke = compare_means(Epinephrine ~ Smoking_Status, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+t_test_p_values_AL_df_hba_smoke = compare_means(Hba1c ~ Smoking_Status, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+t_test_p_values_AL_df_hdl_smoke = compare_means(HDL ~ Smoking_Status, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+t_test_p_values_AL_df_fib_smoke = compare_means(Fibrinogen ~ Smoking_Status, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+t_test_p_values_AL_df_CRP_smoke = compare_means(CRP ~ Smoking_Status, data = cleaned_AL_df, 
+                                         method = "t.test", p.adjust.method = 'fdr') %>%
+    # basing the p.signif off of adjusted p values
+    mutate(p.signif = ifelse(p.adj < 0.0001, '****', 
+                             ifelse(p.adj >= 0.0001 & p.adj < 0.001, '***',
+                                   ifelse(p.adj >= 0.001 & p.adj < 0.01, '**',
+                                         ifelse(p.adj >= 0.01 & p.adj < 0.05, '*', 
+                                                ifelse(p.adj >= 0.05 & p.adj < 0.1, '.', 
+                                                    'ns')))))) #%>%
+
+AL_t_test_p_values_smoke= unique(rbind(t_test_p_values_AL_df_cort_smoke ,t_test_p_values_AL_df_nor_smoke ,t_test_p_values_AL_df_epi_smoke,t_test_p_values_AL_df_hba_smoke ,t_test_p_values_AL_df_hdl_smoke,t_test_p_values_AL_df_fib_smoke,t_test_p_values_AL_df_CRP_smoke))
+
+```
+
+```{r}
+longer_clean_AL_df = cleaned_AL_df %>%
+    pivot_longer(cols = 3:9, names_to = "Biomarkers", values_to = "Value") %>%
+    # adding a col that specifies the group
+    inner_join(subject_info_df[,c(3,5:8)]) %>%
+    # cleaning up names
+    mutate(Smoking_Status = ifelse(Smoking_Status == 'NS', "Non-Smokers", "Cigarette Smokers"),
+          Sex = ifelse(Sex == 'M', "Males", "Females"),
+          Race = ifelse(Race == 'W', "White", "Black"))
+
+# putting variables into a factor for ordering
+#longer_clean_AL_df$Variable = factor(longer_clean_AL_df$Variable, 
+                                       #    levels = c("Acute Stress", "Chronic Stress", "Allostatic Load"))
+longer_clean_AL_df$Sex = factor(longer_clean_AL_df$Sex, 
+                                           levels = c("Females", "Males"))
+longer_clean_AL_df$Smoking_Status = factor(longer_clean_AL_df$Smoking_Status, 
+                                           levels = c("Non-Smokers", "Cigarette Smokers"))
+
+longer_clean_AL_df$Race = factor(longer_clean_AL_df$Race, 
+                                           levels = c("Black", "White"))
+
+head(longer_clean_AL_df)
+```
+
+```{r}
+max_values <- longer_clean_AL_df %>%
+    group_by(Biomarkers) %>%
+    summarize(max_value = max(Value, na.rm = TRUE))
+
+print(max_values)
+
+stat_test_race_AL <- longer_clean_AL_df %>%
+    group_by(Biomarkers) %>%
+    t_test(Value ~ Race) %>%
+    add_significance(cutpoints = c(0, 1e-04, 0.001, 0.01, 0.05, 0.1, 1),
+                     symbols = c("****", "***", "**", "*", ".", "ns")) %>%
+    left_join(max_values, by = "Biomarkers") %>%  # Join max values back to results
+    mutate(y.position = max_value + 2)  # Set y.position based on max_value --> Done
+
+Output = ('~/Documents/0. Research Projects/1. Allostatic load method development/R files/Table outputs')
+cur_date = "110724"
+
+write.xlsx(stat_test_race_AL, paste0(Output,"/", "stat_test_race_AL", cur_date, ".xlsx"), rowNames = FALSE)
+
+
+# View the result
+print(stat_test_race_AL)
+
+stat_test_sex_AL = longer_clean_AL_df %>%
+    group_by(Biomarkers) %>%
+    t_test(Value ~ Sex) %>%
+    add_significance(cutpoints = c(0, 1e-04, 0.001, 0.01, 0.05, 0.1, 1),
+                    symbols = c("****", "***", "**", "*", ".", "ns")) %>%
+    left_join(max_values, by = "Biomarkers") %>%  # Join max values back to results
+    mutate(y.position = max_value + 2)  # Set y.position based on max_value --> Done
+
+Output = ('~/Documents/0. Research Projects/1. Allostatic load method development/R files/Table outputs')
+cur_date = "110724"
+
+write.xlsx(stat_test_sex_AL, paste0(Output,"/", "stat_test_sex_AL", cur_date, ".xlsx"), rowNames = FALSE)
+
+
+stat_test_smoking_AL = longer_clean_AL_df %>%
+    group_by(Biomarkers) %>%
+    t_test(Value ~ Smoking_Status) %>%
+    add_significance(cutpoints = c(0, 1e-04, 0.001, 0.01, 0.05, 0.1, 1),
+                    symbols = c("****", "***", "**", "*", ".", "ns")) %>%
+    left_join(max_values, by = "Biomarkers") %>%  # Join max values back to results
+    mutate(y.position = max_value + 2)  # Set y.position based on max_value --> Done
+
+
+Output = ('~/Documents/0. Research Projects/1. Allostatic load method development/R files/Table outputs')
+cur_date = "110724"
+
+write.xlsx(stat_test_smoking_AL, paste0(Output,"/", "stat_test_smoking_AL", cur_date, ".xlsx"), rowNames = FALSE)
+
+
+##separating out the biomarks into individual df -->  dont need this 
+#longer_clean_AL_df
+
+#Cortisol <- longer_clean_AL_df %>%
+ # filter(Biomarkers %in% c("Cortisol"))
+
+#Noradrenaline <- longer_clean_AL_df %>%
+ # filter(Biomarkers %in% c("Noradrenaline"))
+
+#Epinephrine <- longer_clean_AL_df %>%
+ # filter(Biomarkers %in% c("Epinephrine"))
+
+#HDL <- longer_clean_AL_df %>%
+ # filter(Biomarkers %in% c("HDL"))
+
+#Hba1c <- longer_clean_AL_df %>%
+ # filter(Biomarkers %in% c("Hba1c"))
+
+#Fibrinogen <- longer_clean_AL_df %>%
+ # filter(Biomarkers %in% c("Fibrinogen"))
+
+#CRP <- longer_clean_AL_df %>%
+#  filter(Biomarkers %in% c("CRP"))
+```
+
+
+```{r}
+
+##plots by race
+
+race_boxplots_AL = ggplot(data = longer_clean_AL_df, aes(x = Race, y = Value)) + 
+  geom_boxplot(aes(fill = Race)) + 
+  geom_point(position = position_jitter(w = 0.1)) + 
+
+  facet_wrap(~Biomarkers, scale = 'free_y') +
+
+  # t test p value
+  stat_pvalue_manual(stat_test_race_AL %>%
+                         filter(p.signif != 'ns'), label = "p.signif", size = 10) +
+
+  theme_light() + 
+  theme(axis.line = element_line(colour = "black"), #making x and y axes black
+        axis.text = element_text(size = 12), #changing size of x axis labels
+        legend.position = 'none', # removes legend
+        plot.margin = unit(c(0,0,4,2), "lines"), # adding space at the bottom of the figure
+        axis.title = element_text(face = "bold", size = rel(2.5)),
+        strip.text.x = element_text(size = 15, face = "bold"), #changes size of facet x axis 
+        strip.text.y = element_text(size = 15, face = "bold")) + #changes axis titles
+         
+   scale_fill_manual(values = c('#5ac394', '#a46ebb'))
+
+options(repr.plot.width = 15, repr.plot.height = 16) #changing size
+
+
+
+ggsave(race_boxplots_AL, 
+       filename = 'AL Biomarkers_T test_race diff.pdf',
+       path = "~/Documents/0. Research Projects/1. Allostatic load method development/R files",
+       width = 15, height = 16)
+
+
+        
+ 
+```
+
+```{r}
+
+#plots by sex
+sex_boxplots_AL = ggplot(data = longer_clean_AL_df, aes(x = Sex, y = Value)) + 
+  geom_boxplot(aes(fill = Sex)) + 
+  geom_point(position = position_jitter(w = 0.1)) + 
+
+  facet_wrap(~Biomarkers, scale = 'free_y') +
+
+ stat_pvalue_manual(stat_test_sex_AL %>%
+                         filter(p.signif != 'ns'), label = "p.signif", size = 10) +
+
+
+  theme_light() + 
+  theme(axis.line = element_line(colour = "black"), #making x and y axes black
+        axis.text = element_text(size = 12), #changing size of x axis labels
+        legend.position = 'none', # removes legend
+        plot.margin = unit(c(0,0,2,2), "lines"), # adding space at the bottom of the figure
+        axis.title = element_text(face = "bold", size = rel(1.5)),
+        strip.text.x = element_text(size = 15, face = "bold"), #changes size of facet x axis 
+        strip.text.y = element_text(size = 15, face = "bold"))  #changes axis titles
+ 
+scale_fill_manual(values = c('#4169E1', '#FF1493'))
+
+ggsave(sex_boxplots_AL, 
+       filename = 'AL Biomarkers_T test_sex diff.pdf',
+       path = "~/Documents/0. Research Projects/1. Allostatic load method development/R files",
+       width = 15, height = 16)
+
+
+```
+
+```{r}
+##smoking boxplots
+
+smoking_boxplots_AL = ggplot(data = longer_clean_AL_df, aes(x = Smoking_Status, y = Value)) + 
+  geom_boxplot(aes(fill = Smoking_Status)) + 
+  geom_point(position = position_jitter(w = 0.1)) + 
+
+  facet_wrap(~Biomarkers, scale = 'free_y') +
+
+  # t test p value
+  stat_pvalue_manual(stat_test_smoking_AL %>%
+                         filter(p.signif != 'ns'), label = "p.signif", size = 15) +
+
+  theme_light() + 
+  theme(axis.line = element_line(colour = "black"), #making x and y axes black
+        axis.text = element_text(size = 12), #changing size of x axis labels
+        legend.position = 'none', # removes legend
+        plot.margin = unit(c(0,0,2,2), "lines"), # adding space at the bottom of the figure
+        axis.title = element_text(face = "bold", size = rel(1.5)),
+        strip.text.x = element_text(size = 15, face = "bold"), #changes size of facet x axis 
+        strip.text.y = element_text(size = 15, face = "bold")) + #changes axis titles
+         
+   labs(x = 'Smoking Status') + #changing axis labels 
+   scale_fill_manual(values = c('#b3669e', '#98984d'))
+
+ggsave(smoking_boxplots_AL, 
+       filename = 'AL Biomarkers_T test_smoking diff.pdf',
+       path = "~/Documents/1. Allostatic load method development/R files",
+       width = 15, height = 16)
+
+```
+
+
